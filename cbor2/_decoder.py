@@ -60,6 +60,7 @@ class CBORDecoder:
         "_str_errors",
         "_stringref_namespace",
         "_decode_depth",
+        "_builtin_tags",
     )
 
     _fp: IO[bytes]
@@ -71,6 +72,7 @@ class CBORDecoder:
         tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
         object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
         str_errors: Literal["strict", "error", "replace"] = "strict",
+        builtin_tags: bool = True,
     ):
         """
         :param fp:
@@ -89,6 +91,8 @@ class CBORDecoder:
         :param str_errors:
             determines how to handle unicode decoding errors (see the `Error Handlers`_
             section in the standard library documentation for details)
+        :param builtin_tags:
+            when True, builtin semantic tags will be handled automatically
 
         .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
 
@@ -102,6 +106,7 @@ class CBORDecoder:
         self._stringref_namespace: list[str | bytes] | None = None
         self._immutable = False
         self._decode_depth = 0
+        self._builtin_tags = builtin_tags
 
     @property
     def immutable(self) -> bool:
@@ -111,6 +116,21 @@ class CBORDecoder:
         is set unless the result can be safely used as a dict key.
         """
         return self._immutable
+
+    @immutable.setter
+    def immutable(self, value: bool) -> None:
+        self._immutable = value
+
+    @property
+    def builtin_tags(self) -> bool:
+        """
+        When True, builtin semantic tags will be handled automatically.
+        """
+        return self._builtin_tags
+
+    @builtin_tags.setter
+    def builtin_tags(self, value: bool) -> None:
+        self._builtin_tags = bool(value)
 
     @property
     def fp(self) -> IO[bytes]:
@@ -477,8 +497,9 @@ class CBORDecoder:
     def decode_semantic(self, subtype: int) -> Any:
         # Major tag 6
         tagnum = self._decode_length(subtype)
-        if semantic_decoder := semantic_decoders.get(tagnum):
-            return semantic_decoder(self)
+        if self._builtin_tags:
+            if semantic_decoder := semantic_decoders.get(tagnum):
+                return semantic_decoder(self)
 
         tag = CBORTag(tagnum, None)
         self.set_shareable(tag)
@@ -828,6 +849,7 @@ def loads(
     tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
+    builtin_tags: bool = True,
 ) -> Any:
     """
     Deserialize an object from a bytestring.
@@ -846,6 +868,8 @@ def loads(
     :param str_errors:
         determines how to handle unicode decoding errors (see the `Error Handlers`_
         section in the standard library documentation for details)
+    :param builtin_tags:
+        when True, builtin semantic tags will be handled automatically
     :return:
         the deserialized object
 
@@ -854,7 +878,11 @@ def loads(
     """
     with BytesIO(s) as fp:
         return CBORDecoder(
-            fp, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors
+            fp,
+            tag_hook=tag_hook,
+            object_hook=object_hook,
+            str_errors=str_errors,
+            builtin_tags=builtin_tags,
         ).decode()
 
 
@@ -863,6 +891,7 @@ def load(
     tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
+    builtin_tags: bool = True,
 ) -> Any:
     """
     Deserialize an object from an open file.
@@ -881,6 +910,8 @@ def load(
     :param str_errors:
         determines how to handle unicode decoding errors (see the `Error Handlers`_
         section in the standard library documentation for details)
+    :param builtin_tags:
+        when True, builtin semantic tags will be handled automatically
     :return:
         the deserialized object
 
@@ -888,5 +919,9 @@ def load(
 
     """
     return CBORDecoder(
-        fp, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors
+        fp,
+        tag_hook=tag_hook,
+        object_hook=object_hook,
+        str_errors=str_errors,
+        builtin_tags=builtin_tags,
     ).decode()
